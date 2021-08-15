@@ -113,8 +113,10 @@ func getAccessToken(accessTokenId string) (*accessToken, *errors.RestErr) {
 		var restErr errors.RestErr
 		// since we use same rest error struct for both auth and user service
 		// if can not unmarshal response means someone changed the struct
+		jsonString := string(response.Bytes())
+		fmt.Printf("api response: %s\n", jsonString)
 		if err := json.Unmarshal(response.Bytes(), &restErr); err != nil {
-			return nil, errors.NewInternalServerError("invalid error interface when trying to get access toekn")
+			return nil, errors.NewInternalServerError("invalid error interface when trying to get access token")
 		}
 		// error struct no change return real response error
 		return nil, &restErr
