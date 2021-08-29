@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -9,7 +10,7 @@ import (
 	"time"
 
 	"github.com/federicoleon/golang-restclient/rest"
-	"github.com/shawnzxx/bookstore_oauth-go/oauth/errors"
+	"github.com/shawnzxx/bookstore_utils-go/rest_errors"
 )
 
 const (
@@ -62,7 +63,7 @@ func GetClientId(request *http.Request) int64 {
 	return clientId
 }
 
-func AuthenticateRequest(request *http.Request) *errors.RestErr {
+func AuthenticateRequest(request *http.Request) *rest_errors.RestErr {
 	if request == nil {
 		return nil
 	}
@@ -99,33 +100,37 @@ func cleanRequest(request *http.Request) {
 	request.Header.Del(headerXCallerId)
 }
 
-func getAccessToken(accessTokenId string) (*accessToken, *errors.RestErr) {
+func getAccessToken(accessTokenId string) (*accessToken, *rest_errors.RestErr) {
 	//path route refer to oauth api service
 	response := oauthRestClient.Get(fmt.Sprintf("/oauth/access_token/%s", accessTokenId))
-
-	// request timeout error
+	// invalid response from API call
 	if response == nil || response.Response == nil {
-		return nil, errors.NewInternalServerError("invalid restclient response when trying to get access token")
+		return nil, rest_errors.NewInternalServerError("invalid restclient response when trying to get access token", errors.New("invalid response"))
 	}
 
 	// means error happened
 	if response.StatusCode > 299 {
-		var restErr errors.RestErr
+		var restErr rest_errors.RestErr
+		// jsonString := string(response.Bytes())
+		// fmt.Printf("api response: %s\n", jsonString)
+
 		// since we use same rest error struct for both auth and user service
 		// if can not unmarshal response means someone changed the struct
-		jsonString := string(response.Bytes())
-		fmt.Printf("api response: %s\n", jsonString)
 		if err := json.Unmarshal(response.Bytes(), &restErr); err != nil {
-			return nil, errors.NewInternalServerError("invalid error interface when trying to get access token")
+			return nil, rest_errors.NewInternalServerError("invalid error interface when trying to get access token", errors.New("contract error"))
 		}
 		// error struct no change return real response error
 		return nil, &restErr
 	}
 
 	var at accessToken
-	err := json.Unmarshal(response.Bytes(), &at)
+	var bodyBytes = response.Bytes()
+	bodyString := string(bodyBytes)
+	fmt.Println(bodyString)
+	err := json.Unmarshal(bodyBytes, &at)
 	if err != nil {
-		return nil, errors.NewInternalServerError("error when trying to unmarshal access token response")
+		return nil, rest_errors.NewInternalServerError("error when trying to unmarshal access token response", errors.New("contract error"))
 	}
+
 	return &at, nil
 }
