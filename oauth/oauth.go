@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -21,17 +22,29 @@ const (
 	paramAccessToken = "access_token"
 )
 
+const (
+	AuthServiceHost = "AUTH_SERVICE_HOST"
+)
+
 var (
-	oauthRestClient = rest.RequestBuilder{
-		BaseURL: "http://localhost:8080",
-		Timeout: 200 * time.Millisecond,
-	}
+	oauthRestClient = GetNewRestClient()
 )
 
 type accessToken struct {
 	Id       string `json:"id"`
 	UserId   int64  `json:"user_id"`
 	ClientId int64  `json:"client_id"`
+}
+
+func GetNewRestClient() rest.RequestBuilder {
+	host := os.Getenv(AuthServiceHost)
+	if len(host) == 0 {
+		host = "http://localhost:8080"
+	}
+	return rest.RequestBuilder{
+		BaseURL: host,
+		Timeout: 200 * time.Millisecond,
+	}
 }
 
 func IsPublic(request *http.Request) bool {
