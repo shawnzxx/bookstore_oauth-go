@@ -33,6 +33,7 @@ var (
 	_logger         = logger.GetLogger()
 	oauthRestClient = GetNewRestClient()
 	ipv4            string
+	baseURL         string
 )
 
 type accessToken struct {
@@ -42,26 +43,32 @@ type accessToken struct {
 }
 
 func GetNewRestClient() rest.RequestBuilder {
+	//try to get host name and host port from environment
 	host := os.Getenv(AuthServiceHost)
 	port := os.Getenv(AuthServicePort)
-	//front didn't pass in AuthServiceHost env, change to use default localhost as host address
+
+	//use default host and port if can not find from environment
 	if len(host) == 0 {
-		host = "http://localhost:8080"
-	} else {
-		//print out oauth service IPs
-		ips, err := net.LookupHost(host)
-		_logger.Printf("oauth api LookupHost return: %v, error: %v\n", ips, err)
-		if err != nil {
-			_logger.Printf("Not able to establish connection to host %s with ip %s and port %s, error is %v\n", host, ipv4, port, err)
-			panic(err)
-		}
-		ipv4 = ips[0]
-		host = fmt.Sprintf("http://%s:%s", ipv4, port)
-		_logger.Printf("oauth api final host like: %s\n", host)
+		host = "localhost"
+	}
+	if len(port) == 0 {
+		port = "8080"
 	}
 
+	//find the slice of ip from host name
+	ips, err := net.LookupHost(host)
+	_logger.Printf("oauth api LookupHost return: %v\n", ips)
+	if err != nil {
+		_logger.Printf("Not able to establish connection to host %s with ips %v and port %s, error is %v\n", host, ips, port, err)
+		panic(err)
+	}
+	//get ipv4
+	ipv4 = ips[0]
+	baseURL = fmt.Sprintf("http://%s:%s", ipv4, port)
+	_logger.Printf("service %s BaseURL is %s\n", host, baseURL)
+
 	return rest.RequestBuilder{
-		BaseURL: host,
+		BaseURL: baseURL,
 		Timeout: 200 * time.Millisecond,
 	}
 }
