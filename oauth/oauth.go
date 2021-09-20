@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/shawnzxx/bookstore_utils-go/logger"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -24,10 +26,13 @@ const (
 
 const (
 	AuthServiceHost = "AUTH_SERVICE_HOST"
+	AuthServicePort = "AUTH_SERVICE_PORT"
 )
 
 var (
+	_logger         = logger.GetLogger()
 	oauthRestClient = GetNewRestClient()
+	ipv4            string
 )
 
 type accessToken struct {
@@ -38,9 +43,23 @@ type accessToken struct {
 
 func GetNewRestClient() rest.RequestBuilder {
 	host := os.Getenv(AuthServiceHost)
+	port := os.Getenv(AuthServicePort)
+	//front didn't pass in AuthServiceHost env, change to use default localhost as host address
 	if len(host) == 0 {
 		host = "http://localhost:8080"
+	} else {
+		//print out oauth service IPs
+		ips, err := net.LookupHost(host)
+		_logger.Printf("oauth api LookupHost return: %v, error: %v\n", ips, err)
+		if err != nil {
+			_logger.Printf("Not able to establish connection to host %s with ip %s and port %s, error is %v\n", host, ipv4, port, err)
+			panic(err)
+		}
+		ipv4 = ips[0]
+		host = fmt.Sprintf("http://%s:%s", ipv4, port)
+		_logger.Printf("oauth api final host like: %s\n", host)
 	}
+
 	return rest.RequestBuilder{
 		BaseURL: host,
 		Timeout: 200 * time.Millisecond,
