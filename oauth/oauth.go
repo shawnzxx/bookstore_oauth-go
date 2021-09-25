@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/shawnzxx/bookstore_utils-go/logger"
+	"github.com/shawnzxx/bookstore_utils-go/app_logger"
 	"net"
 	"net/http"
 	"os"
@@ -17,10 +17,9 @@ import (
 )
 
 const (
-	headerXPublic   = "X-Public"
-	headerXClientId = "X-Client-Id"
-	headerXCallerId = "X-Caller-Id"
-
+	headerXPublic    = "X-Public"
+	headerXClientId  = "X-Client-Id"
+	headerXCallerId  = "X-Caller-Id"
 	paramAccessToken = "access_token"
 )
 
@@ -30,7 +29,7 @@ const (
 )
 
 var (
-	_logger         = logger.GetLogger()
+	logger          = app_logger.GetLogger()
 	oauthRestClient = GetNewRestClient()
 	ipv4            string
 	baseURL         string
@@ -57,15 +56,15 @@ func GetNewRestClient() rest.RequestBuilder {
 
 	//find the slice of ip from host name
 	ips, err := net.LookupHost(host)
-	_logger.Printf("oauth api LookupHost return: %v\n", ips)
+	logger.Info("oauth api LookupHost return: %v", ips)
 	if err != nil {
-		_logger.Printf("Not able to establish connection to host %s with ips %v and port %s, error is %v\n", host, ips, port, err)
+		logger.Error("Not able to establish connection to host %s with ips %v and port %s, error is %v", host, ips, port, err)
 		panic(err)
 	}
 	//get ipv4
 	ipv4 = ips[0]
 	baseURL = fmt.Sprintf("http://%s:%s", ipv4, port)
-	_logger.Printf("service %s BaseURL is %s\n", host, baseURL)
+	logger.Info("service %s BaseURL is %s", host, baseURL)
 
 	return rest.RequestBuilder{
 		BaseURL: baseURL,
@@ -86,6 +85,7 @@ func GetCallerId(request *http.Request) int64 {
 	}
 	callerId, err := strconv.ParseInt(request.Header.Get(headerXCallerId), 10, 64)
 	if err != nil {
+		logError(err)
 		return 0
 	}
 	return callerId
@@ -97,6 +97,7 @@ func GetClientId(request *http.Request) int64 {
 	}
 	clientId, err := strconv.ParseInt(request.Header.Get(headerXClientId), 10, 64)
 	if err != nil {
+		logError(err)
 		return 0
 	}
 	return clientId
@@ -119,6 +120,7 @@ func AuthenticateRequest(request *http.Request) *rest_errors.RestErr {
 
 	at, err := getAccessToken(accessTokenId)
 	if err != nil {
+		logError(err)
 		if err.Status == http.StatusNotFound {
 			return nil
 		}
@@ -156,6 +158,7 @@ func getAccessToken(accessTokenId string) (*accessToken, *rest_errors.RestErr) {
 		// since we use same rest error struct for both auth and user service
 		// if can not unmarshal response means someone changed the struct
 		if err := json.Unmarshal(response.Bytes(), &restErr); err != nil {
+			logError(err)
 			return nil, rest_errors.NewInternalServerError("invalid error interface when trying to get access token", errors.New("contract error"))
 		}
 		// error struct no change return real response error
@@ -168,8 +171,14 @@ func getAccessToken(accessTokenId string) (*accessToken, *rest_errors.RestErr) {
 	fmt.Println(bodyString)
 	err := json.Unmarshal(bodyBytes, &at)
 	if err != nil {
+		logError(err)
 		return nil, rest_errors.NewInternalServerError("error when trying to unmarshal access token response", errors.New("contract error"))
 	}
 
 	return &at, nil
+}
+
+func logError(err interface{}) {
+	errByte, _ := json.Marshal(err)
+	logger.Error("bookstore_oauth-go error %v", string(errByte))
 }
