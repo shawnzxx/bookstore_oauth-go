@@ -56,7 +56,6 @@ func GetNewRestClient() rest.RequestBuilder {
 
 	//find the slice of ip from host name
 	ips, err := net.LookupHost(host)
-	logger.Info("oauth api LookupHost return: %v", ips)
 	if err != nil {
 		logger.Error("Not able to establish connection to host %s with ips %v and port %s, error is %v", host, ips, port, err)
 		panic(err)
@@ -85,7 +84,7 @@ func GetCallerId(request *http.Request) int64 {
 	}
 	callerId, err := strconv.ParseInt(request.Header.Get(headerXCallerId), 10, 64)
 	if err != nil {
-		logError(err)
+		logger.Error(err.Error())
 		return 0
 	}
 	return callerId
@@ -97,7 +96,7 @@ func GetClientId(request *http.Request) int64 {
 	}
 	clientId, err := strconv.ParseInt(request.Header.Get(headerXClientId), 10, 64)
 	if err != nil {
-		logError(err)
+		logger.Error(err.Error())
 		return 0
 	}
 	return clientId
@@ -115,16 +114,12 @@ func AuthenticateRequest(request *http.Request) *rest_errors.RestErr {
 	// localhost:8080/users/1?access_token=123abc
 	accessTokenId := strings.TrimSpace(request.URL.Query().Get(paramAccessToken))
 	if accessTokenId == "" {
-		return nil
+		return rest_errors.NewBadRequestError("access_token param is empty string")
 	}
 
-	at, err := getAccessToken(accessTokenId)
-	if err != nil {
-		logError(err)
-		if err.Status == http.StatusNotFound {
-			return nil
-		}
-		return err
+	at, restErr := getAccessToken(accessTokenId)
+	if restErr != nil {
+		return restErr
 	}
 
 	//if get access token from oauth service, fill in actual request header
@@ -144,9 +139,10 @@ func cleanRequest(request *http.Request) {
 func getAccessToken(accessTokenId string) (*accessToken, *rest_errors.RestErr) {
 	//path route refer to oauth api service
 	response := oauthRestClient.Get(fmt.Sprintf("/oauth/access_token/%s", accessTokenId))
-	// invalid response from API call
+
+	// invalid response from API call, can not reach the api or api timeout
 	if response == nil || response.Response == nil {
-		return nil, rest_errors.NewInternalServerError("invalid restclient response when trying to get access token", errors.New("invalid response"))
+		return nil, rest_errors.NewInternalServerError("invalid restClient response when trying to get access token", errors.New("invalid response"))
 	}
 
 	// means error happened
@@ -158,7 +154,7 @@ func getAccessToken(accessTokenId string) (*accessToken, *rest_errors.RestErr) {
 		// since we use same rest error struct for both auth and user service
 		// if can not unmarshal response means someone changed the struct
 		if err := json.Unmarshal(response.Bytes(), &restErr); err != nil {
-			logError(err)
+			logger.Error(err.Error())
 			return nil, rest_errors.NewInternalServerError("invalid error interface when trying to get access token", errors.New("contract error"))
 		}
 		// error struct no change return real response error
@@ -168,17 +164,14 @@ func getAccessToken(accessTokenId string) (*accessToken, *rest_errors.RestErr) {
 	var at accessToken
 	var bodyBytes = response.Bytes()
 	bodyString := string(bodyBytes)
-	fmt.Println(bodyString)
+	logger.Info("access token is: %s", bodyString)
+
+	// can not unmarshal the access token struct
 	err := json.Unmarshal(bodyBytes, &at)
 	if err != nil {
-		logError(err)
+		logger.Error(err.Error())
 		return nil, rest_errors.NewInternalServerError("error when trying to unmarshal access token response", errors.New("contract error"))
 	}
 
 	return &at, nil
-}
-
-func logError(err interface{}) {
-	errByte, _ := json.Marshal(err)
-	logger.Error("bookstore_oauth-go error %v", string(errByte))
 }
